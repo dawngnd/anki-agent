@@ -266,6 +266,11 @@ add-many --file -` for bulk insertion.
 Use the **reviewed and approved** content from Step 4-5 to populate the card
 fields. Do NOT regenerate or change content — use exactly what the user approved.
 
+If adding audio pronunciation:
+1. Download audio MP3 files from Oxford Learner's Dictionaries (see [Audio Pronunciation Handling](#audio-pronunciation-handling))
+2. Store audio in Anki media: `anki-agent media store --filename "{word}_us.mp3" --path "artifacts/audio/{word}_us.mp3"`
+3. Include `[sound:{word}_us.mp3]` in the Back field of the card JSON.
+
 ### Step 8: Verify & Report
 
 ```bash
@@ -273,7 +278,7 @@ anki-agent note find --query "tag:ai-generated added:1" --details
 anki-agent sync
 ```
 
-Report to the user: number of cards created, deck, and card types used.
+Report to the user: number of cards created, deck, card types used, and audio files stored (if applicable).
 
 ---
 
@@ -290,9 +295,9 @@ Report to the user: number of cards created, deck, and card types used.
 <p><em>{part_of_speech}</em></p>
 ```
 
-**Back** — Pronunciation + Meaning + Example:
+**Back** — Pronunciation + Audio + Meaning + Example:
 ```html
-<p><strong>Phát âm:</strong> /{ipa}/</p>
+<p><strong>Phát âm:</strong> /{ipa}/ [sound:{word}_us.mp3]</p>
 <p><strong>Nghĩa:</strong> {vietnamese_meaning}</p>
 <hr>
 <p><strong>Ví dụ:</strong></p>
@@ -309,7 +314,7 @@ Report to the user: number of cards created, deck, and card types used.
   "model": "Basic",
   "fields": {
     "Front": "<p style='font-size:1.5em'><strong>commute</strong></p><p><em>verb / noun</em></p>",
-    "Back": "<p><strong>Phát âm:</strong> /kəˈmjuːt/</p><p><strong>Nghĩa:</strong> (v) đi làm hàng ngày; (n) quãng đường đi làm</p><hr><p><strong>Ví dụ:</strong></p><p><em>I <u>commute</u> to the office by subway every day.</em></p><p>Tôi đi làm bằng tàu điện ngầm mỗi ngày.</p>"
+    "Back": "<p><strong>Phát âm:</strong> /kəˈmjuːt/ [sound:commute_us.mp3]</p><p><strong>Nghĩa:</strong> (v) đi làm hàng ngày; (n) quãng đường đi làm</p><hr><p><strong>Ví dụ:</strong></p><p><em>I <u>commute</u> to the office by subway every day.</em></p><p>Tôi đi làm bằng tàu điện ngầm mỗi ngày.</p>"
   },
   "tags": ["type::vocab", "topic::daily-life", "topic::work", "level::B1", "ai-generated"]
 }
@@ -463,6 +468,44 @@ Use these emoji + label combinations consistently in Phrase/Cloze cards:
 | 🎉 | Congratulations | Chúc mừng |
 | ❌ | Declining | Từ chối lịch sự |
 | 🙏 | Apologizing | Xin lỗi |
+
+---
+
+## Audio Pronunciation Handling (Tải & Gắn Audio Phát Âm)
+
+Khi người dùng yêu cầu thêm audio phát âm (hoặc chế độ tự động kèm audio):
+
+### 1. Nguồn Audio & Xử lý chặn Bot (Anti-Bot Awareness)
+- ⚠️ **Cambridge Dictionary (`dictionary.cambridge.org`):** Áp dụng Cloudflare Bot Management (Turnstile), chặn tất cả script tự động bằng HTTP `403 Forbidden`. Không nên crawl tự động bằng script vì sẽ bị chặn CAPTCHA.
+- ✅ **Oxford Learner's Dictionaries (`oxfordlearnersdictionaries.com` - Khuyên dùng):**
+  - Cung cấp file audio thu âm phòng thu chuẩn bản xứ (MP3 160 kbps).
+  - Có thể truy xuất trực tiếp qua header trình duyệt tiêu chuẩn (`User-Agent: Mozilla/5.0...`).
+  - Hỗ trợ cả giọng Mỹ (`us_pron`) và Anh (`uk_pron`).
+  - *Lưu ý tên từ điển:* Một số từ theo chính tả Anh - Anh (ví dụ: `favourable` thay vì `favorable`, hoặc `contract_1` nếu từ có nhiều mục từ loại).
+- 🔄 **Nguồn thay thế (Fallback):** Google Text-to-Speech (gTTS) hoặc Wikimedia Commons.
+
+### 2. Quy trình tải và nạp vào Anki
+
+1. **Tải file MP3 về thư mục artifacts:**
+   - Đặt tên chuẩn: `{word}_{us|uk}.mp3` (ví dụ: `contract_us.mp3`).
+   - Lưu vào thư mục `artifacts/audio/{word}_{accent}.mp3`.
+
+2. **Lưu file vào Anki Media:**
+   ```bash
+   anki-agent media store --filename "{word}_us.mp3" --path "artifacts/audio/{word}_us.mp3"
+   ```
+
+3. **Cú pháp gắn Audio vào thẻ Anki:**
+   - Dùng cú pháp `[sound:{filename}]` đặt ngay sau phiên âm IPA trong trường `Back`:
+     ```html
+     <p><strong>Phát âm:</strong> /{ipa}/ [sound:{word}_us.mp3]</p>
+     ```
+   - Khi lật xem mặt sau, Anki sẽ tự động phát âm thanh chuẩn.
+
+4. **Cập nhật thẻ đã có (nếu bổ sung audio sau khi tạo thẻ):**
+   ```bash
+   anki-agent note update --id <NOTE_ID> --field Back --value "<nội dung Back mới có [sound:...mp3]>"
+   ```
 
 ---
 
