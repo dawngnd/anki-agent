@@ -312,6 +312,21 @@ When the user asks to create flashcards, present this selection:
 
 ---
 
+### 8. Specialized English Learning Suite
+
+For English flashcards, use the dedicated Custom Note Types designed for clean data and responsive modern UI:
+
+| Model | Target Deck | Key Fields | Purpose |
+|---|---|---|---|
+| `English_Grammar` | `...::Grammar` | `Title`, `Prompt`, `Core_Rule`, `Formula_Structure`, `Explanation`, `Examples`, `Common_Pitfalls` | Hiểu bản chất ngữ pháp, cấu trúc, bẫy và ví dụ câu |
+| `English_Vocab` | `...::Vocabulary` | `Word`, `PartOfSpeech`, `Phonetic_IPA`, `Audio`, `Vietnamese_Meaning`, `Collocations`, `Example_Sentence`, `Example_Translation`, `Image` | Học từ vựng với phản xạ 3 bước (phát âm, nghĩa, tự đặt câu) |
+| `English_Phrase_Reflex` | `...::Phrases` | `Context`, `Speaker_A`, `Learner_Intention`, `Hint`, `Target_Phrase`, `Audio`, `Full_Response`, `Meaning_Usage`, `Alternative_Responses` | Luyện phản xạ đối đáp giao tiếp (Chat Bubble UI) với bộ 3 ngữ cảnh bắt buộc (Bối cảnh 1-2 câu, Lời thoại đối phương chân thực, Ý định phản xạ tiếng Việt). CẤM dùng câu hỏi canned questions. |
+| `English_Tip` | `...::Notes` | `Tip_Name`, `Category`, `Prompt`, `Core_Rule`, `Common_Mistakes`, `Example_Analysis` | Ghi nhớ mẹo thi, bẫy trắc nghiệm (Wrong vs Right) |
+
+*Chi tiết cách sử dụng và quy trình tạo xem tại skill `english-learning`.*
+
+---
+
 ## Card Design Best Practices
 
 > [!TIP]

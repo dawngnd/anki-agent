@@ -2,528 +2,207 @@
 name: english-learning
 description: >-
   Creates English learning Anki flashcards from user-provided vocabulary,
-  phrases, or conversation scripts. Automatically determines card type
-  (vocabulary, phrase/cloze, situation-response) or asks the user.
-  Handles deck selection, card generation with proper templates, and
-  bulk insertion via anki-agent CLI. Use when the user wants to learn
-  English vocabulary, conversational phrases, or situational expressions.
+  phrases, grammar rules, conversation scripts, or tips. Supports 4 dedicated
+  models: English_Grammar, English_Vocab, English_Phrase_Reflex, and English_Tip.
+  Handles deck selection (defaulting to English_v0.0.1 subdecks), research,
+  audio integration, and bulk insertion via anki-agent CLI. Use when the user
+  wants to learn English grammar, vocabulary, phrases, or test-taking tips.
 ---
 
-# English Learning Flashcard Skill
+# English Learning Flashcard Skill (v0.0.1 Architecture)
 
 ## Overview
 
-This skill creates English learning flashcards for Vietnamese speakers. It
-supports three card types optimized for different learning goals:
+This skill creates high-quality English learning flashcards for Vietnamese learners. It operates on a **4-pillar architecture** utilizing dedicated custom Anki models (clean data fields, responsive Modern UI, Dark/Light mode support):
 
-| Card Type | Goal | Anki Model | When to Use |
-|-----------|------|------------|-------------|
-| **Vocabulary** | Nhớ nghĩa, phát âm, cách dùng từ đơn | `Basic` | User provides word list or topic |
-| **Phrase / Cloze** | Nhớ cách diễn đạt tự nhiên | `Cloze` | User provides phrases, dialogues, listening scripts |
-| **Situation Response** | Phản xạ giao tiếp | `Basic` | User describes situations they want to practice |
+| Category | Model Name | Goal & Learning Interaction | Target Deck |
+|---|---|---|---|
+| **1. Ngữ pháp (Grammar)** | `English_Grammar` | Nhìn tên chủ điểm/định nghĩa, người học phải tự trình bày bản chất quy tắc, công thức và ví dụ. | `English_v0.0.1::Grammar` |
+| **2. Từ vựng (Vocabulary)** | `English_Vocab` | Nhìn mặt từ tiếng Anh, phản xạ 3 bước: đọc to phát âm, nói ý nghĩa, tự đặt 1 câu ví dụ trước khi lật mặt sau. | `English_v0.0.1::Vocabulary` |
+| **3. Cụm từ & Phản xạ (Phrase Reflex)** | `English_Phrase_Reflex` | Đọc bối cảnh giao tiếp + lời đối phương (Speaker A) + gợi ý ý định, phản xạ đáp lại bằng Cụm từ mục tiêu. | `English_v0.0.1::Phrases` |
+| **4. Ghi chú & Mẹo (Notes / Tips)** | `English_Tip` | Nhìn tên mẹo/bẫy đề thi, lập tức tái hiện câu thần chú (mnemonic), các lỗi bẫy cần tránh (Wrong vs Right). | `English_v0.0.1::Notes` |
 
-## Prerequisites
-
-- **anki-card-templates** skill — for base card formatting rules
-- **anki-flashcard-management** skill — for CLI commands and deck workflow
-
-> [!IMPORTANT]
-> Always read and follow the `anki-flashcard-management` skill for CLI usage
-> and the `anki-card-templates` skill for HTML formatting rules. This skill
-> extends those with English-specific templates and workflow.
+> [!TIP]
+> **Cấu hình Deck Gốc (`DECK_ROOT`)**: Mặc định hiện tại là `English_v0.0.1`. Khi người dùng xác nhận đã kiểm chứng xong và muốn đưa về chính thức, chỉ cần đổi `DECK_ROOT = "English"`.
 
 ---
 
-## Workflow
+## Workflow (Quy Trình 8 Bước Chuẩn)
 
 > [!IMPORTANT]
-> **Core principle**: NEVER create Anki cards without user review first.
-> The workflow is: Analyze → Research → **Review** → Create.
+> **Nguyên tắc bất di bất dịch**: KHÔNG BAO GIỜ tự động tạo thẻ vào Anki khi người dùng chưa xem và xác nhận kết quả nghiên cứu.
+> Quy trình luôn là: **Analyze → Research → Present Review → User Feedback → Insert Cards → Verify**.
 
-### Step 1: Analyze User Input
+### Bước 1: Phân Loại Đầu Vào (Analyze User Input)
 
-When the user provides content for English learning, classify it into one or
-more of these categories:
+Khi người dùng cung cấp tài liệu hoặc yêu cầu học, phân loại vào 1 trong 4 nhóm:
 
-| Input Type | Examples | → Card Type |
-|-----------|----------|-------------|
-| Word list | "learn: commute, resilient, ambiguous" | Vocabulary |
-| Topic request | "cho tôi từ vựng về du lịch" | Vocabulary |
-| Phrases / Sentences | "I haven't seen you in ages" | Phrase (Cloze) |
-| Dialogue / Script | A conversation transcript | Phrase (Cloze) |
-| Situation description | "cách hỏi đường lịch sự" | Situation Response |
-| Mixed content | Article with new words + useful phrases | Vocabulary + Cloze |
+| Đầu vào | Ví dụ | → Model & Deck |
+|---|---|---|
+| Quy tắc ngữ pháp, cấu trúc câu, thì, mệnh đề | "học về câu điều kiện loại 3", "quy tắc hòa hợp S-V" | `English_Grammar` → `...::Grammar` |
+| Danh sách từ vựng đơn lẻ, từ theo chủ đề | "từ vựng về hợp đồng", "learn: resilient, ambiguous" | `English_Vocab` → `...::Vocabulary` |
+| Cụm từ, thành ngữ, đoạn hội thoại, tình huống | "cách xin thêm thời gian suy nghĩ", "take a moment to" | `English_Phrase_Reflex` → `...::Phrases` |
+| Mẹo làm bài thi (TOEIC, IELTS), bẫy đề thi, mẹo nhớ | "bẫy danh từ không đếm được", "phân biệt while vs when" | `English_Tip` → `...::Notes` |
+| Hỗn hợp | Bài đọc có từ mới, ngữ pháp và cụm từ hay | Phân tách và tạo đúng loại tương ứng |
 
-### Step 2: Confirm Card Type with User
+---
 
-If the card type is ambiguous, ask the user:
+### Bước 2: Xác Nhận Thể Loại (Nếu Chưa Rõ Ràng)
 
-> Bạn muốn tạo loại thẻ nào?
+Nếu đầu vào chưa rõ loại thẻ muốn tạo, hỏi người dùng:
+
+> Bạn muốn tạo thẻ học theo dạng nào sau đây?
 >
-> 1. **Từ vựng** (Vocabulary) — Học từ đơn: nghĩa, phát âm, ví dụ
-> 2. **Cụm từ / Mẫu câu** (Phrases) — Điền vào chỗ trống trong câu thực tế
-> 3. **Phản xạ tình huống** (Situation) — Thấy tình huống → nhớ cách nói
-> 4. **Kết hợp** — Tự động chọn loại phù hợp cho từng item
-
-If the input clearly maps to one type (e.g., a list of single words → Vocabulary),
-skip this step and proceed directly.
-
-### Step 3: Research
-
-> [!IMPORTANT]
-> **Agent MUST research thoroughly before presenting to user.** Do NOT just
-> generate content from memory. Use web search and reliable sources to verify
-> accuracy of pronunciation, meanings, usage, and examples.
-
-#### 3a. Research for Vocabulary
-
-For each word, research and collect:
-
-| Field | How to Research | Source Priority |
-|-------|----------------|----------------|
-| **IPA Pronunciation** | Search web for exact IPA | Cambridge Dictionary, Oxford Learner's |
-| **Part of Speech** | Verify all relevant parts of speech | Dictionary sources |
-| **Meaning(s)** | Primary meaning + important secondary meanings | Dictionary + context |
-| **Collocations** | Common word combinations | Corpus-based dictionaries, OZDIC |
-| **Example Sentence** | Natural, real-world usage | Dictionary examples or create realistic ones |
-| **CEFR Level** | Frequency/difficulty assessment | English Profile, vocabulary lists |
-| **Common Mistakes** | Errors Vietnamese speakers often make | Teaching resources |
-| **Synonyms / Antonyms** | Related words for context | Thesaurus |
-
-**Research procedure**:
-1. Search `"{word}" definition pronunciation IPA` on the web
-2. Verify IPA from Cambridge Dictionary or similar authoritative source
-3. Check collocations and common usage patterns
-4. For words with multiple meanings, identify which meanings are most useful
-   for the learner's context (topic, level)
-
-#### 3b. Research for Phrases
-
-For each phrase/expression, research and collect:
-
-| Field | How to Research | Source Priority |
-|-------|----------------|----------------|
-| **Exact Form** | Verify the standard/common form | Corpus search, dictionaries |
-| **Meaning** | Precise Vietnamese translation | Bilingual resources |
-| **Register** | Formal / Informal / Neutral | Usage notes in dictionaries |
-| **Context** | When and where it's used | Example dialogues, forums |
-| **Variations** | Common alternative phrasings | Native speaker resources |
-| **Pronunciation Notes** | Connected speech, stress patterns | Listening resources |
-
-**Research procedure**:
-1. Search `"{phrase}" meaning usage examples` on the web
-2. Verify the phrase is actually common and natural (not textbook-only)
-3. Check if there are regional differences (US vs UK English)
-4. Find real-world examples of usage
-
-#### 3c. Research for Situation Responses
-
-For each situation, research and collect:
-
-| Field | How to Research |
-|-------|----------------|
-| **Most Natural Response** | What native speakers actually say |
-| **Formality Variants** | Casual → Formal alternatives |
-| **Cultural Notes** | Cross-cultural considerations |
-| **Common Mistakes** | What non-native speakers incorrectly say |
-
-### Step 4: Present Research for User Review
-
-> [!IMPORTANT]
-> **MUST present ALL research to the user in a clear, readable format BEFORE
-> creating any Anki cards.** Wait for explicit user approval.
-
-#### 4a. Vocabulary Review Format
-
-Present as a numbered markdown table:
-
-```markdown
-## 📝 Kết quả nghiên cứu — Từ vựng [{topic}]
-
-| # | Từ | Loại từ | Phát âm | Nghĩa | Ví dụ | Level |
-|---|-----|---------|---------|-------|-------|-------|
-| 1 | **commute** | verb/noun | /kəˈmjuːt/ | đi làm hàng ngày; quãng đường đi làm | _I **commute** to work by train._ | B1 |
-| 2 | **resilient** | adj | /rɪˈzɪl.i.ənt/ | kiên cường, phục hồi nhanh | _Children are remarkably **resilient**._ | B2 |
-| ... | | | | | | |
-
-### Chi tiết bổ sung:
-
-**1. commute**
-- 🔗 Collocations: daily commute, long commute, commute to work
-- ⚠️ Lưu ý: Người Việt hay nhầm với "communicate"
-- 🔄 Synonyms: travel to work, make the journey
-
-**2. resilient**
-- 🔗 Collocations: resilient economy, emotionally resilient, remarkably resilient
-- ⚠️ Lưu ý: Không dùng "resilient" cho đồ vật (dùng "durable" thay thế)
-- 🔄 Synonyms: tough, hardy, adaptable
+> 1. 📘 **Ngữ pháp (Grammar)** — Định nghĩa, công thức cấu trúc, bẫy và ví dụ câu
+> 2. 📗 **Từ vựng (Vocabulary)** — Thẻ từ vựng có checklist phản xạ 3 bước, audio và collocations
+> 3. 📙 **Cụm từ / Phản xạ hội thoại (Phrase Reflex)** — Đoạn đối đáp 2 người (Speaker A & You) có ngữ cảnh
+> 4. 📒 **Ghi chú & Mẹo (Tip & Trick)** — Tên mẹo thi, câu thần chú ghi nhớ và bẫy sai thường gặp
+> 5. 🔄 **Kết hợp** — Tự động phân loại phù hợp cho từng mục
 
 ---
-> Bạn muốn chỉnh sửa gì không? Có thể:
-> - ❌ Bỏ từ nào không muốn học
-> - ✏️ Sửa nghĩa / ví dụ
-> - ➕ Thêm từ mới
-> - ✅ OK — Tạo thẻ Anki
-```
 
-#### 4b. Phrase Review Format
+### Bước 3: Nghiên Cứu Chi Tiết (Research Protocol)
 
-```markdown
-## 📝 Kết quả nghiên cứu — Cụm từ / Mẫu câu
+Agent bắt buộc phải tra cứu chính xác từ các nguồn uy tín trước khi soạn thảo thẻ:
 
-| # | Phrase | Nghĩa | Dùng khi | Level |
-|---|--------|-------|---------|-------|
-| 1 | **long time no see** | Lâu rồi không gặp | Gặp lại bạn bè | A2 |
-| 2 | **managed to squeeze in** | Cố xếp vào lịch | Kể về việc bận rộn | B2 |
+1. **Từ vựng (Vocab)**:
+   - Tra cứu phiên âm IPA và audio phát âm giọng Mỹ/Anh từ **Oxford Learner's Dictionaries** (`oxfordlearnersdictionaries.com`).
+   - Tra cứu Collocations tự nhiên qua từ điển Oxford Collocations Dictionary hoặc OZDIC.
+   - Xác định cấp độ CEFR (`level::B1`, `level::B2`, etc.).
 
-### Chi tiết:
+2. **Cụm từ / Mẫu câu (Phrase Reflex)**:
+   - **Quy tắc Bộ 3 Ngữ Cảnh Bắt Buộc (3-Pillar Context Rule)**:
+     - `Context`: Bối cảnh chi tiết 1-2 câu (Địa điểm/không gian + Ai nói với ai + Tình huống phát sinh). Tuyệt đối không chỉ để mỗi nhãn danh mục ngắn ngủi. (VD: `🏢 Văn phòng: Bạn đang ngồi làm việc thì đồng nghiệp ghé bàn muốn trao đổi gấp tài liệu, đúng lúc bạn có điện thoại khẩn.`).
+     - `Speaker_A`: Lời thoại mào đầu / kích hoạt tự nhiên từ đối phương (Colleague, Manager, Waiter, Examiner, Friend). Phải là câu nói/câu hỏi đời thực, gắn chặt với hoàn cảnh.
+     - `Learner_Intention`: Ý định phản hồi của người học bằng tiếng Việt rõ ràng, biểu cảm.
+   - **CẤM Tuyệt Đối Canned Questions**: Tuyệt đối KHÔNG dùng các câu hỏi rập khuôn, chung chung như: *"Could you tell me more about how you handle this situation?"*, *"Can you elaborate on that?"*, *"Can you handle this in English?"*. Lời thoại Speaker A phải là chất xúc tác trực tiếp để người học bật ra câu trả lời chứa Target Phrase.
+   - Cung cấp gợi ý từ đầu (`Hint`), câu phản xạ trọn vẹn (`Full_Response`) và 2-3 cách diễn đạt thay thế (`Alternative_Responses`).
 
-**1. long time no see**
-- 📖 Register: Thân mật (informal)
-- 💡 Variations: "It's been ages!", "I haven't seen you in forever!"
-- 🗣️ Phát âm: Nhấn "long" và "see", nói liền
-- ⚠️ Lưu ý: Chỉ dùng với người quen, không dùng trong email công việc
+3. **Ngữ pháp (Grammar)**:
+   - Tóm lược bản chất quy tắc ngắn gọn, dễ hiểu.
+   - Sơ đồ hóa công thức rõ ràng.
+   - Đưa ra bẫy thi thường gặp hoặc ngoại lệ hay gây nhầm lẫn.
 
-**2. managed to squeeze in**
-- 📖 Register: Trung tính (neutral)
-- 💡 Variations: "fit in", "make time for"
-- 🗣️ Phát âm: /skwiːz ɪn/ — "squeeze" nhiều người Việt phát âm sai
-- ⚠️ Lưu ý: "squeeze in" = chen vào (lịch trình), khác "squeeze" (bóp/nắn)
+4. **Mẹo & Bẫy (Tip)**:
+   - Tạo tên mẹo ngắn gọn, ấn tượng.
+   - Đúc kết thành câu thần chú / quy tắc nhớ nhanh (Mnemonic).
+   - Minh họa bảng đối chiếu ❌ Câu sai (Wrong) vs ✅ Câu đúng (Right).
 
 ---
-> Bạn muốn chỉnh sửa gì không?
-> - ❌ Bỏ phrase nào không muốn học
-> - ✏️ Sửa nghĩa / giải thích
-> - ➕ Thêm phrase mới
-> - ✅ OK — Tạo thẻ Anki
-```
 
-#### 4c. Situation Review Format
+### Bước 4: Trình Bày Cho Người Dùng Review (Review Presentation)
+
+Trình bày bảng tóm tắt và chi tiết các thẻ dự kiến tạo theo mẫu sau:
 
 ```markdown
-## 📝 Kết quả nghiên cứu — Phản xạ tình huống [{context}]
+## 📝 Kết Quả Nghiên Cứu Flashcards (Deck: English_v0.0.1)
 
-| # | Tình huống | Cách nói tự nhiên | Level |
-|---|-----------|-------------------|-------|
-| 1 | Xin bàn cho 2 người | "Table for two, please." | A2 |
-| 2 | Gọi món nhưng chưa quyết định | "Could you give us a few more minutes?" | A2 |
-
-### Chi tiết:
-
-**1. Xin bàn cho 2 người**
-- ✨ Primary: "Hi, table for two, please."
-- 🔄 Alternatives:
-  - "Could we get a table for two?" (lịch sự hơn)
-  - "We have a reservation under [name]." (nếu đã đặt)
-- ⚠️ Tránh nói: "Give me a table" — quá thô lỗ
-- 🌍 Văn hóa: Ở Mỹ thường có host/hostess đón ở cửa, đợi được dẫn vào
+| # | Loại thẻ | Mục tiêu học / Từ vựng | Ý nghĩa / Quy tắc cốt lõi | Level |
+|---|---|---|---|---|
+| 1 | 📗 Vocab | **contract** (n) | Hợp đồng, giao kèo pháp lý | B1 |
+| 2 | 📙 Phrase | **take a moment to** | Dành một chút thời gian để làm gì | B1 |
+| 3 | 📘 Grammar | **Hòa hợp S - V với "N1 + of + N2"** | Động từ luôn chia theo N1 (Chủ ngữ thật) | B1 |
+| 4 | 📒 Tip | **Bẫy danh từ không đếm được** | Không có -s/-es, luôn chia động từ số ít | B1 |
 
 ---
-> Bạn muốn chỉnh sửa gì không?
-> - ❌ Bỏ tình huống nào
-> - ✏️ Sửa cách diễn đạt
-> - ➕ Thêm tình huống mới
-> - ✅ OK — Tạo thẻ Anki
+> Bạn có muốn điều chỉnh gì không?
+> - ✏️ Chỉnh sửa nghĩa / ví dụ
+> - ❌ Bỏ bớt thẻ không cần thiết
+> - ➕ Thêm thẻ mới
+> - ✅ OK — Bắt đầu nạp thẻ vào Anki
 ```
 
-### Step 5: Handle User Feedback
+---
 
-Based on user response to the review:
+### Bước 5: Tiếp Nhận Phản Hồi & Hoàn Thiện
 
-| User Action | Agent Response |
-|-------------|---------------|
-| ✅ "OK" / "Tạo đi" / "Được rồi" | Proceed to Step 6 (Deck Selection + Create) |
-| ❌ "Bỏ từ 3, 5" | Remove those items, re-present updated list |
-| ✏️ "Sửa nghĩa từ 2 thành ..." | Update the item, re-present updated list |
-| ➕ "Thêm từ: elaborate" | Research the new word, add to list, re-present |
-| 🔄 "Đổi ví dụ từ 1" | Generate new example, re-present |
-| ❓ More info requested | Provide additional detail on the requested item |
+Chỉ khi người dùng xác nhận **"OK"** hoặc **"Tạo thẻ đi"**, agent mới tiến hành chèn thẻ vào Anki. Nếu có chỉnh sửa, cập nhật lại và hiển thị danh sách cuối cùng.
 
-> [!TIP]
-> After any edit, re-present the **full updated list** so the user sees the
-> final version. Only proceed to card creation when user explicitly approves.
+---
 
-### Step 6: Deck Selection
+### Bước 6: Chèn Thẻ Vào Anki Bằng CLI (Bulk Insert)
 
-Follow the standard deck selection procedure from the `anki-flashcard-management`
-skill:
-
-1. Run `anki-agent deck list`
-2. Present existing decks to user
-3. Suggest the default structure if no English decks exist:
-   - `English::Vocabulary` for vocabulary cards
-   - `English::Phrases` for phrase and situation cards
-
-> [!TIP]
-> If the user already has English decks from previous sessions, reuse them.
-> Only suggest creating new decks if none exist.
-
-### Step 7: Generate & Insert Cards
-
-Generate cards following the exact templates below. Then use `anki-agent note
-add-many --file -` for bulk insertion.
-
-Use the **reviewed and approved** content from Step 4-5 to populate the card
-fields. Do NOT regenerate or change content — use exactly what the user approved.
-
-If adding audio pronunciation:
-1. Download audio MP3 files from Oxford Learner's Dictionaries (see [Audio Pronunciation Handling](#audio-pronunciation-handling))
-2. Store audio in Anki media: `anki-agent media store --filename "{word}_us.mp3" --path "artifacts/audio/{word}_us.mp3"`
-3. Include `[sound:{word}_us.mp3]` in the Back field of the card JSON.
-
-### Step 8: Verify & Report
+Sử dụng `anki-agent note add-many --file -` với cấu trúc JSON chuẩn cho từng model:
 
 ```bash
-anki-agent note find --query "tag:ai-generated added:1" --details
-anki-agent sync
-```
-
-Report to the user: number of cards created, deck, card types used, and audio files stored (if applicable).
-
----
-
-## Card Templates
-
-### Template A: Vocabulary (Từ vựng)
-
-**Model**: `Basic`
-**Default Deck**: `English::Vocabulary`
-
-**Front** — The English word with part of speech:
-```html
-<p style='font-size:1.5em'><strong>{word}</strong></p>
-<p><em>{part_of_speech}</em></p>
-```
-
-**Back** — Pronunciation + Audio + Meaning + Example:
-```html
-<p><strong>Phát âm:</strong> /{ipa}/ [sound:{word}_us.mp3]</p>
-<p><strong>Nghĩa:</strong> {vietnamese_meaning}</p>
-<hr>
-<p><strong>Ví dụ:</strong></p>
-<p><em>{example_sentence_with_<u>word</u>_underlined}</em></p>
-<p>{vietnamese_translation_of_example}</p>
-```
-
-**Required tags**: `type::vocab`, `level::{cefr_level}`, `topic::{topic}`
-
-**Complete JSON example**:
-```json
-{
-  "deck": "English::Vocabulary",
-  "model": "Basic",
-  "fields": {
-    "Front": "<p style='font-size:1.5em'><strong>commute</strong></p><p><em>verb / noun</em></p>",
-    "Back": "<p><strong>Phát âm:</strong> /kəˈmjuːt/ [sound:commute_us.mp3]</p><p><strong>Nghĩa:</strong> (v) đi làm hàng ngày; (n) quãng đường đi làm</p><hr><p><strong>Ví dụ:</strong></p><p><em>I <u>commute</u> to the office by subway every day.</em></p><p>Tôi đi làm bằng tàu điện ngầm mỗi ngày.</p>"
-  },
-  "tags": ["type::vocab", "topic::daily-life", "topic::work", "level::B1", "ai-generated"]
-}
-```
-
-**Rules for Vocabulary cards**:
-1. **One primary meaning per card** — if a word has multiple important meanings, create multiple cards
-2. **Always include an example sentence** — context aids retention
-3. **Underline the target word** in the example with `<u>` tags
-4. **Include IPA pronunciation** — look up correct phonetic transcription
-5. **Tag by CEFR level** — `level::A2`, `level::B1`, `level::B2`, etc.
-6. **Tag by topic** — `topic::travel`, `topic::food`, `topic::work`, etc.
-
----
-
-### Template B: Phrase / Cloze (Cụm từ / Mẫu câu)
-
-**Model**: `Cloze`
-**Default Deck**: `English::Phrases`
-
-**Text** — Sentence with cloze deletion on the key phrase:
-```html
-<p><strong>{emoji} {situation_label}</strong></p>
-<p>{sentence_with_{{c1::key_phrase}}_cloze}</p>
-```
-
-**Extra** — Vietnamese meaning + usage note:
-```html
-<p><strong>Nghĩa:</strong> {vietnamese_translation}</p>
-<p><strong>Dùng khi:</strong> {when_to_use}</p>
-```
-
-**Required tags**: `type::phrase`, `situation::{situation}`, `level::{cefr_level}`
-
-**Complete JSON example**:
-```json
-{
-  "deck": "English::Phrases",
-  "model": "Cloze",
-  "fields": {
-    "Text": "<p><strong>🎧 Greeting</strong></p><p>{{c1::I haven't seen you}} in ages! How have you been?</p>",
-    "Extra": "<p><strong>Nghĩa:</strong> Lâu lắm rồi không gặp! Dạo này bạn thế nào?</p><p><strong>Dùng khi:</strong> Gặp lại bạn bè sau thời gian dài</p>"
-  },
-  "tags": ["type::phrase", "situation::greeting", "level::B1", "ai-generated"]
-}
-```
-
-**Rules for Phrase/Cloze cards**:
-1. **Cloze the key phrase**, not random words — the cloze should be the part the learner needs to recall
-2. **Use emoji + label** for situation context at the top: 🎧 Greeting, 🍽️ Ordering, 💭 Opinion, etc.
-3. **Keep surrounding context** meaningful — don't cloze so much the sentence is unrecognizable
-4. **Use separate cloze numbers** (`c1`, `c2`) only when testing separate facts
-5. **Add hint** with `{{c1::answer::hint}}` if the cloze is ambiguous
-6. **Extra field** must include Vietnamese translation and usage context
-7. **For dialogues**: extract the most useful/natural phrases, not every line
-
-**Choosing what to cloze**:
-- ✅ Idiomatic expressions: `{{c1::I haven't seen you}} in ages`
-- ✅ Collocations: `Could I {{c1::get}} the chicken salad`
-- ✅ Discourse markers: `{{c1::As far as I'm concerned}}, we should...`
-- ✅ Phrasal verbs: `The meeting was {{c1::called off}} due to rain`
-- ❌ Don't cloze common words like "the", "is", "a"
-- ❌ Don't cloze proper nouns or numbers
-
----
-
-### Template C: Situation Response (Phản xạ tình huống)
-
-**Model**: `Basic`
-**Default Deck**: `English::Phrases`
-
-**Front** — Situation described in Vietnamese:
-```html
-<p><strong>🎭 Situation:</strong></p>
-<p>{situation_description_in_vietnamese}</p>
-<p><em>Nói bằng tiếng Anh?</em></p>
-```
-
-**Back** — Natural English response + alternatives:
-```html
-<p><strong>Cách nói tự nhiên:</strong></p>
-<p style='font-size:1.2em'><em>"{primary_response}"</em></p>
-<hr>
-<p><strong>Các cách khác:</strong></p>
-<ul>
-  <li>"{alternative_1}"</li>
-  <li>"{alternative_2}"</li>
-</ul>
-<p><strong>Lưu ý:</strong> {usage_note}</p>
-```
-
-**Required tags**: `type::situation`, `situation::{situation}`, `level::{cefr_level}`
-
-**Complete JSON example**:
-```json
-{
-  "deck": "English::Phrases",
-  "model": "Basic",
-  "fields": {
-    "Front": "<p><strong>🎭 Situation:</strong></p><p>Bạn muốn <strong>hỏi đường</strong> đến nhà ga gần nhất một cách lịch sự.</p><p><em>Nói bằng tiếng Anh?</em></p>",
-    "Back": "<p><strong>Cách nói tự nhiên:</strong></p><p style='font-size:1.2em'><em>\"Excuse me, could you tell me how to get to the nearest train station?\"</em></p><hr><p><strong>Các cách khác:</strong></p><ul><li>\"Do you happen to know where the train station is?\"</li><li>\"I'm looking for the train station. Could you point me in the right direction?\"</li></ul><p><strong>Lưu ý:</strong> Bắt đầu bằng 'Excuse me' để lịch sự. 'Could you tell me...' trang trọng hơn 'Where is...'</p>"
-  },
-  "tags": ["type::situation", "situation::asking-directions", "level::A2", "ai-generated"]
-}
-```
-
-**Rules for Situation Response cards**:
-1. **Front in Vietnamese** — describe the situation the learner would face
-2. **Bold the key action** in the situation: "Bạn muốn **hỏi đường**..."
-3. **Primary response** should be the most natural, commonly used expression
-4. **Provide 2-3 alternatives** at different formality levels
-5. **Add usage notes** — explain when each variation is appropriate
-6. **Tag by situation** — `situation::greeting`, `situation::ordering`, etc.
-
----
-
-## Tag System
-
-Always apply these tags to generated cards:
-
-| Tag Prefix | Purpose | Examples |
-|-----------|---------|---------|
-| `type::` | Card type | `type::vocab`, `type::phrase`, `type::situation` |
-| `topic::` | Vocabulary topic | `topic::travel`, `topic::food`, `topic::work`, `topic::health` |
-| `situation::` | Conversation context | `situation::greeting`, `situation::ordering`, `situation::small-talk` |
-| `level::` | CEFR level | `level::A1`, `level::A2`, `level::B1`, `level::B2`, `level::C1` |
-| `source::` | Content source | `source::podcast`, `source::movie`, `source::textbook`, `source::conversation` |
-| `ai-generated` | Traceability | Always add this tag |
-
----
-
-## Common Situation Labels (Emoji Reference)
-
-Use these emoji + label combinations consistently in Phrase/Cloze cards:
-
-| Emoji | Label | Dùng cho |
-|-------|-------|---------|
-| 🎧 | Greeting | Chào hỏi |
-| 💬 | Small Talk | Nói chuyện phiếm |
-| 🍽️ | Ordering | Gọi món, mua hàng |
-| 🗺️ | Directions | Hỏi/chỉ đường |
-| 💭 | Opinion | Bày tỏ ý kiến |
-| 🤝 | Request | Nhờ vả, yêu cầu |
-| 📞 | Phone | Nói chuyện điện thoại |
-| 🏥 | Health | Sức khỏe, khám bệnh |
-| 🏨 | Hotel | Đặt phòng, check-in |
-| ✈️ | Travel | Sân bay, di chuyển |
-| 💼 | Work | Công việc, họp hành |
-| 😊 | Compliment | Khen ngợi |
-| 😢 | Sympathy | Chia buồn, đồng cảm |
-| 🎉 | Congratulations | Chúc mừng |
-| ❌ | Declining | Từ chối lịch sự |
-| 🙏 | Apologizing | Xin lỗi |
-
----
-
-## Audio Pronunciation Handling (Tải & Gắn Audio Phát Âm)
-
-Khi người dùng yêu cầu thêm audio phát âm (hoặc chế độ tự động kèm audio):
-
-### 1. Nguồn Audio & Xử lý chặn Bot (Anti-Bot Awareness)
-- ⚠️ **Cambridge Dictionary (`dictionary.cambridge.org`):** Áp dụng Cloudflare Bot Management (Turnstile), chặn tất cả script tự động bằng HTTP `403 Forbidden`. Không nên crawl tự động bằng script vì sẽ bị chặn CAPTCHA.
-- ✅ **Oxford Learner's Dictionaries (`oxfordlearnersdictionaries.com` - Khuyên dùng):**
-  - Cung cấp file audio thu âm phòng thu chuẩn bản xứ (MP3 160 kbps).
-  - Có thể truy xuất trực tiếp qua header trình duyệt tiêu chuẩn (`User-Agent: Mozilla/5.0...`).
-  - Hỗ trợ cả giọng Mỹ (`us_pron`) và Anh (`uk_pron`).
-  - *Lưu ý tên từ điển:* Một số từ theo chính tả Anh - Anh (ví dụ: `favourable` thay vì `favorable`, hoặc `contract_1` nếu từ có nhiều mục từ loại).
-- 🔄 **Nguồn thay thế (Fallback):** Google Text-to-Speech (gTTS) hoặc Wikimedia Commons.
-
-### 2. Quy trình tải và nạp vào Anki
-
-1. **Tải file MP3 về thư mục artifacts:**
-   - Đặt tên chuẩn: `{word}_{us|uk}.mp3` (ví dụ: `contract_us.mp3`).
-   - Lưu vào thư mục `artifacts/audio/{word}_{accent}.mp3`.
-
-2. **Lưu file vào Anki Media:**
-   ```bash
-   anki-agent media store --filename "{word}_us.mp3" --path "artifacts/audio/{word}_us.mp3"
-   ```
-
-3. **Cú pháp gắn Audio vào thẻ Anki:**
-   - Dùng cú pháp `[sound:{filename}]` đặt ngay sau phiên âm IPA trong trường `Back`:
-     ```html
-     <p><strong>Phát âm:</strong> /{ipa}/ [sound:{word}_us.mp3]</p>
-     ```
-   - Khi lật xem mặt sau, Anki sẽ tự động phát âm thanh chuẩn.
-
-4. **Cập nhật thẻ đã có (nếu bổ sung audio sau khi tạo thẻ):**
-   ```bash
-   anki-agent note update --id <NOTE_ID> --field Back --value "<nội dung Back mới có [sound:...mp3]>"
-   ```
-
----
-
-## Bulk Generation Format
-
-When generating multiple cards, output a single JSON array and pipe to CLI:
-
-```bash
-cat <<'EOF' | anki-agent note add-many --file -
+cat <<'EOF' | uv run anki-agent note add-many --file -
 [
-  { "deck": "...", "model": "...", "fields": {...}, "tags": [...] },
-  { "deck": "...", "model": "...", "fields": {...}, "tags": [...] }
+  {
+    "deck": "English_v0.0.1::Vocabulary",
+    "model": "English_Vocab",
+    "fields": {
+      "Word": "contract",
+      "PartOfSpeech": "noun",
+      "Phonetic_IPA": "ˈkɑːn.trækt",
+      "Audio": "[sound:contract_us.mp3]",
+      "Vietnamese_Meaning": "Hợp đồng, giao kèo pháp lý",
+      "Collocations": "sign a contract, breach a contract, negotiate a contract",
+      "Example_Sentence": "Both companies signed a two-year <u>contract</u> yesterday.",
+      "Example_Translation": "Cả hai công ty đã ký một hợp đồng có thời hạn hai năm vào ngày hôm qua.",
+      "Image": ""
+    },
+    "tags": ["type::vocab", "topic::business", "level::B1", "ai-generated"]
+  }
 ]
 EOF
 ```
 
-> [!CAUTION]
-> - Always validate JSON before piping to `add-many`
-> - Always tag with `ai-generated` for traceability
-> - Verify after adding: `anki-agent note find --query "tag:ai-generated added:1" --details`
-> - Sync after major additions: `anki-agent sync`
+---
+
+### Bước 7: Kiểm Tra & Đồng Bộ (Verify & Sync)
+
+```bash
+uv run anki-agent note find --query "deck:English_v0.0.1 tag:ai-generated added:1" --details
+uv run anki-agent sync
+```
+
+---
+
+## Chi Tiết Các Model & Trường Dữ Liệu (Field Specs)
+
+### 1. Model: `English_Grammar`
+- **Deck**: `English_v0.0.1::Grammar`
+- **Fields**:
+  - `Title`: Tên chủ điểm / Quy tắc ngữ pháp (VD: `[Quy tắc] Hòa hợp S - V với cụm "N1 + of + N2"`)
+  - `Prompt`: Câu hỏi phản xạ ở mặt trước (VD: `Trong cấu trúc N1 + of + N2 + V, động từ chia theo N1 hay N2? Cho ví dụ?`)
+  - `Core_Rule`: Quy tắc cốt lõi ngắn gọn
+  - `Formula_Structure`: Công thức / sơ đồ cấu trúc
+  - `Explanation`: Giải thích chi tiết và phân tích
+  - `Examples`: Câu ví dụ thực tế minh họa
+  - `Common_Pitfalls`: Bẫy đề thi hoặc các trường hợp ngoại lệ
+
+### 2. Model: `English_Vocab`
+- **Deck**: `English_v0.0.1::Vocabulary`
+- **Fields**:
+  - `Word`: Từ tiếng Anh
+  - `PartOfSpeech`: Từ loại (noun, verb, adjective, adverb...)
+  - `Phonetic_IPA`: Phiên âm quốc tế (không cần dấu gạch chéo `/ /`)
+  - `Audio`: Cú pháp file âm thanh `[sound:{word}_us.mp3]`
+  - `Vietnamese_Meaning`: Nghĩa tiếng Việt
+  - `Collocations`: Cụm từ hay đi kèm
+  - `Example_Sentence`: Câu ví dụ chứa từ (gạch chân từ bằng thẻ `<u>`)
+  - `Example_Translation`: Dịch câu ví dụ sang tiếng Việt
+  - `Image`: Thẻ ảnh `<img src="...">` (nếu có)
+
+### 3. Model: `English_Phrase_Reflex`
+- **Deck**: `English_v0.0.1::Phrases`
+- **Fields**:
+  - `Context`: Bối cảnh / Tình huống giao tiếp chi tiết 1-2 câu (VD: `🏢 Văn phòng: Bạn đang ngồi làm việc thì đồng nghiệp ghé bàn muốn trao đổi gấp tài liệu, đúng lúc bạn có điện thoại khẩn.`)
+  - `Speaker_A`: Lời thoại mào đầu / câu hỏi trực tiếp của đối phương (VD: `Colleague: "Hey, do you have a quick minute to look over this report with me?"`)
+  - `Learner_Intention`: Ý định phản hồi của người học bằng tiếng Việt (VD: `Bạn muốn nói: Tôi cần tạm rời bàn làm việc mấy phút để nghe một cuộc điện thoại khẩn cấp.`)
+  - `Hint`: Gợi ý từ đầu (VD: `step away fr...`)
+  - `Target_Phrase`: Cụm từ mục tiêu cần học (VD: `step away from`)
+  - `Audio`: File âm thanh phát âm cụm từ / câu nếu có
+  - `Full_Response`: Câu phản xạ hoàn chỉnh bằng tiếng Anh (VD: `"I need to step away from my desk for a few minutes to take an urgent phone call."`)
+  - `Meaning_Usage`: Giải nghĩa cụm từ, phiên âm IPA, collocations và ngữ cảnh sử dụng
+  - `Alternative_Responses`: Danh sách các biến thể tự nhiên khác (`<ul><li>...</li></ul>`)
+
+### 4. Model: `English_Tip`
+- **Deck**: `English_v0.0.1::Notes`
+- **Fields**:
+  - `Tip_Name`: Tên mẹo / Khái niệm bẫy
+  - `Category`: Phân loại (VD: `TOEIC Part 5 / Ngữ pháp`)
+  - `Prompt`: Câu hỏi gợi nhớ ở mặt trước
+  - `Core_Rule`: Quy tắc vàng / Câu thần chú ghi nhớ
+  - `Common_Mistakes`: Bảng bẫy thường gặp (❌ Sai vs ✅ Đúng)
+  - `Example_Analysis`: Phân tích ví dụ thực tế
